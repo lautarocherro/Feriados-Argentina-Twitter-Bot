@@ -8,6 +8,7 @@ from json import dumps
 from os import getenv, environ
 from time import sleep
 
+
 def main():
     load_env_variables('.env')
     consumer_key = getenv("TW_CONSUMER_KEY")
@@ -61,6 +62,7 @@ def get_html() -> str:
     # Launch Chrome with the profile and load the URL
     options = Options()
     options.page_load_strategy = 'normal'
+    options.add_argument(f"--user-data-dir={webdriver_path}")
     options.add_argument('--headless')
 
     driver = webdriver.Chrome(options=options)
@@ -73,6 +75,24 @@ def get_html() -> str:
     driver.quit()
 
     return page_source
+
+
+def fancy_days_left(days_left: str) -> str:
+    fancy_mapping = {
+        "0": "0️⃣",
+        "1": "1️⃣",
+        "2": "2️⃣",
+        "3": "3️⃣",
+        "4": "4️⃣",
+        "5": "5️⃣",
+        "6": "6️⃣",
+        "7": "7️⃣",
+        "8": "8️⃣",
+        "9": "9️⃣"
+    }
+    fancy_days_left = "".join(fancy_mapping.get(number, "") for number in days_left)
+
+    return fancy_days_left
 
 
 def make_tweet(consumer_key: str, consumer_secret: str) -> bool:
@@ -145,6 +165,7 @@ def make_tweet(consumer_key: str, consumer_secret: str) -> bool:
 
 def get_tweet() -> str:
     days_left, feriado_name, date_str = get_elements(get_html())
+    days_left = fancy_days_left(days_left)
     tweet = ""
     if days_left == "0":
         tweet += f"Hoy es feriado!\n\n"
@@ -155,8 +176,8 @@ def get_tweet() -> str:
         tweet += f"⁉️{feriado_name}"
 
     else:
-        tweet += f"Faltan {days_left} días para el próximo feriado.\n\n"
-        tweet += f"📆 {date_str}\n\n"
+        tweet += f"Faltan {days_left} días para el próximo feriado\n\n"
+        tweet += f"🗓️ {date_str}\n\n"
         tweet += f"⁉️ {feriado_name}"
 
     return tweet
