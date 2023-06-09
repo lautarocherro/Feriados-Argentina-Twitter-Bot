@@ -57,7 +57,7 @@ def get_elements(html: str) -> tuple:
 def get_html() -> str:
     url = "https://www.argentina.gob.ar/interior/feriados-nacionales-2023"
 
-    webdriver_path = f'{getcwd()}/chromedriver'
+    webdriver_path = f'{getcwd()}/webdriver'
 
     # Launch Chrome with the profile and load the URL
     options = Options()
