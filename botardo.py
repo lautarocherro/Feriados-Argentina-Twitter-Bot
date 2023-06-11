@@ -17,6 +17,7 @@ def main():
     oauth_token_secret = getenv("TW_OAUTH_TOKEN_SECRET")
 
     while True:
+        print("Running...")
         sleep_until_next_tweet()
         make_tweet(consumer_key, consumer_secret, oauth_token, oauth_token_secret)
 
@@ -64,6 +65,7 @@ def sleep_until_next_tweet():
     # Convert the time difference to seconds
     sleep_duration = time_difference.total_seconds()
 
+    print(f"Sleeping for {sleep_duration} seconds")
     # Sleep until the target datetime
     sleep(sleep_duration)
 
