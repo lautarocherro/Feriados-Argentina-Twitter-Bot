@@ -129,9 +129,27 @@ def fancy_days_left(days_left: str) -> str:
     return fancy_days_left
 
 
+def get_weekday(days_left: str) -> str:
+    # Get the current datetime in UTC-3
+    current_datetime = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-3))) \
+                       + datetime.timedelta(days=int(days_left))
+
+    weekday = current_datetime.strftime("%A")
+    spanish_mapping = {
+        "Sunday": "Domingo",
+        "Monday": "Lunes",
+        "Tuesday": "Martes",
+        "Wednesday": "Miércoles",
+        "Thursday": "Jueves",
+        "Friday": "Viernes",
+        "Saturday": "Sábado"
+    }
+    return spanish_mapping.get(weekday, "")
+
+
 def get_tweet_content() -> str:
     days_left, feriado_name, date_str = get_elements(get_html())
-    days_left = fancy_days_left(days_left)
+    emoji_days_left = fancy_days_left(days_left)
     tweet = ""
     if days_left == "0":
         tweet += f"Hoy es feriado!\n\n"
@@ -142,8 +160,9 @@ def get_tweet_content() -> str:
         tweet += f"⁉️{feriado_name}"
 
     else:
-        tweet += f"Faltan {days_left} días para el próximo feriado\n\n"
-        tweet += f"🗓️ {date_str}\n\n"
+        weekday = get_weekday(days_left)
+        tweet += f"Faltan {emoji_days_left} días para el próximo feriado\n\n"
+        tweet += f"🗓️ {weekday} {date_str}\n\n"
         tweet += f"⁉️ {feriado_name}"
 
     return tweet
