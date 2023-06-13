@@ -1,5 +1,7 @@
 ### This is a pretty basic [Twitter Bot](https://twitter.com/ProxFeriadoAR) that posts a daily tweet, reporting how many days are left until the next holiday in Argentina.
-### For that i make use of the free [Twitter API](https://developer.twitter.com/en/docs/twitter-api).
+### For that i make use of:
+- Free tier [Twitter API](https://developer.twitter.com/en/docs/twitter-api)
+- [No Laborables API](https://pjnovas.gitbooks.io/no-laborables/content/)
 
 ## 1. Installation
 
