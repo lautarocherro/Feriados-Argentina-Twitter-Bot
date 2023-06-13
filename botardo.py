@@ -1,43 +1,21 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from json import dumps
-from os import getenv, environ
-from time import sleep
-import pytz
-from util import month_mapping, fancy_mapping, weekday_mapping
+from os import getenv
 
+import pandas as pd
+import pytz
 from requests import get as get_request
 from requests_oauthlib import OAuth1Session
-import pandas as pd
 
-
-def load_env_variables():
-    with open(".env", 'r') as f:
-        for line in f:
-            if line.strip() and not line.startswith('#'):
-                key, value = line.strip().split('=', 1)
-                environ[key] = value
-
-
-def sleep_until_next_tweet():
-    # Get the current datetime in UTC-3
-    current_datetime = datetime.now(timezone(timedelta(hours=-3)))
-
-    # Set the target datetime for the next day at 9 AM
-    target_datetime = current_datetime.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
-
-    # Calculate the time difference between the current and target datetime
-    time_difference = target_datetime - current_datetime
-
-    # Convert the time difference to seconds
-    sleep_duration = time_difference.total_seconds()
-
-    print(f"Sleeping for {sleep_duration} seconds")
-    # Sleep until the target datetime
-    sleep(sleep_duration)
+from util import sleep_until_next_tweet, load_env_variables, get_date_str, get_fancy_numbers
 
 
 class HolidayInfo:
     def __init__(self):
+        self.weekend_length = None
+        self.first_weekend_date = None
+        self.last_weekend_date = None
+        self.next_holiday = None
         self.date_str = None
         self.tweet_content = None
         self.fancy_days_left = None
@@ -56,8 +34,9 @@ class HolidayInfo:
         self.oauth_token_secret = getenv("TW_OAUTH_TOKEN_SECRET")
 
     def run(self):
+        print("Running...")
+
         while True:
-            print("Running...")
             sleep_until_next_tweet()
             self.make_tweet()
 
@@ -93,35 +72,6 @@ class HolidayInfo:
         json_response = response.json()
         print(dumps(json_response, indent=4, sort_keys=True))
 
-    def process_holidays(self):
-
-        # First, get the Holidays DataFrame
-        self.set_holidays()
-        # Get the current datetime in UTC-3
-        timezone = pytz.timezone('America/Argentina/Buenos_Aires')
-        now = datetime.now(timezone).replace(tzinfo=None)  # Convert to offset-naive datetime
-
-        # Get future holidays (including today)
-        future_holidays_df = self.holidays[
-            (self.holidays["year"] >= now.year) &
-            (self.holidays["mes"] >= now.month) &
-            (self.holidays["dia"] >= now.day)]
-
-        # Get the next holiday
-        next_holiday = future_holidays_df.iloc[0]
-
-        # Get next holiday date info
-        self.next_holiday_day = next_holiday["dia"]
-        self.next_holiday_month = next_holiday["mes"]
-        self.next_holiday_year = next_holiday["year"]
-        self.next_holiday_reason = next_holiday["motivo"]
-
-        # Get days left to next holiday
-        self.days_left = (datetime(self.next_holiday_year, self.next_holiday_month, self.next_holiday_day) - now).days \
-                         + 1  # Add 1 to include today
-        # Set weekday
-        self.set_weekday()
-
     def set_holidays(self):
         # Get current year
         year = datetime.now().year
@@ -153,23 +103,72 @@ class HolidayInfo:
         next_year_holidays["year"] = year + 1
 
         # Concatenate the holidays from next year
-        self.holidays = pd.concat([self.holidays, next_year_holidays])
+        self.holidays = pd.concat([self.holidays, next_year_holidays]).reset_index(drop=True)
 
-    def set_weekday(self):
+        # Create a new column with the date as a datetime object
+        self.holidays["date"] = self.holidays.apply(
+            lambda row: datetime(year=row["year"], month=row["mes"], day=row["dia"], hour=23, minute=59, second=59),
+            axis=1
+        )
+
+        # Create a new column with each day's weekday
+        self.holidays["weekday"] = self.holidays.apply(
+            lambda row: row["date"].strftime("%A"),
+            axis=1
+        )
+
+    def process_holidays(self):
+
+        # First, get the Holidays DataFrame
+        self.set_holidays()
         # Get the current datetime in UTC-3
-        current_datetime = datetime.now(timezone(timedelta(hours=-3))) \
-                           + timedelta(days=int(self.days_left))
+        timezone = pytz.timezone('America/Argentina/Buenos_Aires')
+        now = datetime.now(timezone).replace(tzinfo=None)  # Convert to offset-naive datetime
 
-        weekday = current_datetime.strftime("%A")
+        # Get future holidays (including today)
+        future_holidays_df = self.holidays[self.holidays["date"] >= now]
 
-        self.next_holiday_weekday = weekday_mapping.get(weekday, "")
+        # Get the next holiday
+        self.next_holiday = future_holidays_df.iloc[0]
 
-    def set_fancy_days_left(self):
-        self.fancy_days_left = "".join(fancy_mapping.get(number, "") for number in str(self.days_left))
+        # Get next holiday date info
+        self.next_holiday_day = self.next_holiday["dia"]
+        self.next_holiday_month = self.next_holiday["mes"]
+        self.next_holiday_year = self.next_holiday["year"]
+        self.next_holiday_reason = self.next_holiday["motivo"]
+        self.next_holiday_weekday = self.next_holiday["weekday"]
 
-    def set_date_str(self):
-        self.date_str = f"{self.next_holiday_weekday} {self.next_holiday_day}" \
-                        f" de {month_mapping.get(self.next_holiday_month, '')} de {self.next_holiday_year}"
+        # Get days left to next holiday and add 1 to include today
+        self.days_left = (datetime(self.next_holiday_year, self.next_holiday_month, self.next_holiday_day)
+                          - now).days + 1
+
+        self.process_long_weekends()
+
+    def process_long_weekends(self):
+        next_holiday_date = self.next_holiday["date"]
+
+        # Set first and last weekend dates
+        self.set_first_weekend_date(next_holiday_date)
+        self.set_last_weekend_date(self.first_weekend_date)
+
+        # Get the number of days between the first and last weekend dates
+        self.weekend_length = (self.last_weekend_date - self.first_weekend_date).days + 1
+
+    def set_first_weekend_date(self, date):
+        # Check if the day before of next_holiday is a holiday or weekend
+        day_before = date - timedelta(days=1)
+        if day_before.weekday() > 4 or day_before in self.holidays["date"].values:
+            self.set_first_weekend_date(day_before)
+        else:
+            self.first_weekend_date = date
+
+    def set_last_weekend_date(self, date):
+        # Check if the day after of date is a holiday or weekend
+        day_after = date + timedelta(days=1)
+        if day_after.weekday() > 4 or day_after in self.holidays["date"].values:
+            self.set_last_weekend_date(day_after)
+        else:
+            self.last_weekend_date = date
 
     def set_tweet_content(self):
         # First process Holiday's info
@@ -186,13 +185,27 @@ class HolidayInfo:
             self.tweet_content += f"⁉️{self.next_holiday_reason}"
 
         else:
-            # Set variables exlusive for this case
-            self.set_date_str()
-            self.set_fancy_days_left()
+            date_str = get_date_str(self.next_holiday_weekday, self.next_holiday_day, self.next_holiday_month,
+                                    self.next_holiday_year)
 
-            self.tweet_content += f"Faltan {self.fancy_days_left} días para el próximo feriado\n\n"
-            self.tweet_content += f"🗓️ {self.date_str}\n\n"
+            self.tweet_content += f"Faltan {get_fancy_numbers(self.days_left)} días para el próximo feriado:\n\n"
+            self.tweet_content += f"🗓️ {date_str}\n"
             self.tweet_content += f"⁉️ {self.next_holiday_reason}"
+
+        if self.weekend_length > 2:
+            weekend_start_date_str = get_date_str(self.first_weekend_date.strftime("%A"),
+                                                  self.first_weekend_date.day,
+                                                  self.first_weekend_date.month,
+                                                  self.first_weekend_date.year)
+
+            weekend_end_date_str = get_date_str(self.last_weekend_date.strftime("%A"),
+                                                self.last_weekend_date.day,
+                                                self.last_weekend_date.month,
+                                                self.last_weekend_date.year)
+
+            self.tweet_content += f"\n\n\nSerá un fin de semana de {get_fancy_numbers(self.weekend_length)} días:\n\n"
+            self.tweet_content += f"📈 Desde el {weekend_start_date_str}\n"
+            self.tweet_content += f"📉 Hasta el {weekend_end_date_str}"
 
         return self.tweet_content
 
