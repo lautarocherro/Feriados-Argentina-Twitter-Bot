@@ -1,172 +1,214 @@
-import datetime
-from os import getcwd
-from selenium import webdriver
-from bs4 import BeautifulSoup
-from selenium.webdriver.chrome.options import Options
-from requests_oauthlib import OAuth1Session
+from datetime import datetime, timedelta
 from json import dumps
-from os import getenv, environ
-from time import sleep
+from os import getenv
+
+import pandas as pd
+import pytz
+from requests import get as get_request
+from requests_oauthlib import OAuth1Session
+
+from util import sleep_until_next_tweet, load_env_variables, get_date_str, get_fancy_numbers
 
 
-def main():
-    load_env_variables()
-    consumer_key = getenv("TW_CONSUMER_KEY")
-    consumer_secret = getenv("TW_CONSUMER_SECRET")
-    oauth_token = getenv("TW_OAUTH_TOKEN")
-    oauth_token_secret = getenv("TW_OAUTH_TOKEN_SECRET")
+class HolidayInfo:
+    def __init__(self):
+        self.weekend_length = None
+        self.first_weekend_date = None
+        self.last_weekend_date = None
+        self.next_holiday = None
+        self.date_str = None
+        self.tweet_content = None
+        self.fancy_days_left = None
+        self.days_left = None
+        self.next_holiday_weekday = None
+        self.next_holiday_reason = None
+        self.next_holiday_year = None
+        self.next_holiday_month = None
+        self.next_holiday_day = None
+        self.holidays = None
 
-    while True:
+        load_env_variables()
+        self.consumer_key = getenv("TW_CONSUMER_KEY")
+        self.consumer_secret = getenv("TW_CONSUMER_SECRET")
+        self.oauth_token = getenv("TW_OAUTH_TOKEN")
+        self.oauth_token_secret = getenv("TW_OAUTH_TOKEN_SECRET")
+
+    def run(self):
         print("Running...")
-        sleep_until_next_tweet()
-        make_tweet(consumer_key, consumer_secret, oauth_token, oauth_token_secret)
 
+        while True:
+            sleep_until_next_tweet()
+            self.make_tweet()
 
-def make_tweet(consumer_key: str, consumer_secret: str, oauth_token: str, oauth_token_secret: str) -> None:
+    def make_tweet(self):
 
-    payload = {"text": get_tweet_content()}
+        # Set Tweet's content
+        self.set_tweet_content()
 
-    # Make the request
-    oauth = OAuth1Session(
-        consumer_key,
-        client_secret=consumer_secret,
-        resource_owner_key=oauth_token,
-        resource_owner_secret=oauth_token_secret,
-    )
+        payload = {"text": self.tweet_content}
 
-    # Making the request
-    response = oauth.post(
-        "https://api.twitter.com/2/tweets",
-        json=payload,
-    )
-
-    if response.status_code != 201:
-        raise Exception(
-            "Request returned an error: {} {}".format(response.status_code, response.text)
+        # Make the request
+        oauth = OAuth1Session(
+            self.consumer_key,
+            client_secret=self.consumer_secret,
+            resource_owner_key=self.oauth_token,
+            resource_owner_secret=self.oauth_token_secret,
         )
 
-    print("Response code: {}".format(response.status_code))
+        # Making the request
+        response = oauth.post(
+            "https://api.twitter.com/2/tweets",
+            json=payload,
+        )
 
-    # Saving the response as JSON
-    json_response = response.json()
-    print(dumps(json_response, indent=4, sort_keys=True))
+        if response.status_code != 201:
+            raise Exception(
+                "Request returned an error: {} {}".format(response.status_code, response.text)
+            )
 
+        print("Response code: {}".format(response.status_code))
 
-def sleep_until_next_tweet():
-    # Get the current datetime in UTC-3
-    current_datetime = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-3)))
+        # Saving the response as JSON
+        json_response = response.json()
+        print(dumps(json_response, indent=4, sort_keys=True))
 
-    # Set the target datetime for the next day at 9 AM
-    target_datetime = current_datetime.replace(hour=9, minute=0, second=0, microsecond=0) + datetime.timedelta(days=1)
+    def set_holidays(self):
+        # Get current year
+        year = datetime.now().year
 
-    # Calculate the time difference between the current and target datetime
-    time_difference = target_datetime - current_datetime
+        current_year_url = f"https://nolaborables.com.ar/api/v2/feriados/{year}"
+        next_year_url = f"https://nolaborables.com.ar/api/v2/feriados/{year + 1}"
 
-    # Convert the time difference to seconds
-    sleep_duration = time_difference.total_seconds()
+        # Make the requests
+        current_year_response = get_request(current_year_url)
+        next_year_response = get_request(next_year_url)
 
-    print(f"Sleeping for {sleep_duration} seconds")
-    # Sleep until the target datetime
-    sleep(sleep_duration)
+        if current_year_response.status_code != 200 or next_year_response.status_code != 200:
+            raise Exception(
+                "Request returned an error: {} {}".format(current_year_response.status_code, current_year_response.text)
+            )
 
+        # Convert responses to JSON
+        current_year_json = current_year_response.json()
+        next_year_json = next_year_response.json()
 
-def load_env_variables():
-    with open(".env", 'r') as f:
-        for line in f:
-            if line.strip() and not line.startswith('#'):
-                key, value = line.strip().split('=', 1)
-                environ[key] = value
+        # Convert the response to a DataFrame for this year
+        self.holidays = pd.DataFrame(current_year_json).drop(columns=["info", "id", "original", "tipo"])
+        # Add column year
+        self.holidays["year"] = year
 
+        # Convert the response to a DataFrame for next year
+        next_year_holidays = pd.DataFrame(next_year_json).drop(columns=["info", "id", "original", "tipo"])
+        # Add column year
+        next_year_holidays["year"] = year + 1
 
-def get_elements(html: str) -> tuple:
-    soup = BeautifulSoup(html, "html.parser")
+        # Concatenate the holidays from next year
+        self.holidays = pd.concat([self.holidays, next_year_holidays]).reset_index(drop=True)
 
-    day = soup.find(id="js-faltan")
-    name = soup.find(id="js-detalle")
-    date = soup.find(id="js-proximo")
+        # Create a new column with the date as a datetime object
+        self.holidays["date"] = self.holidays.apply(
+            lambda row: datetime(year=row["year"], month=row["mes"], day=row["dia"], hour=23, minute=59, second=59),
+            axis=1
+        )
 
-    return day.text, name.text, date.text
+        # Create a new column with each day's weekday
+        self.holidays["weekday"] = self.holidays.apply(
+            lambda row: row["date"].strftime("%A"),
+            axis=1
+        )
 
+    def process_holidays(self):
 
-def get_html() -> str:
-    url = "https://www.argentina.gob.ar/interior/feriados-nacionales-2023"
+        # First, get the Holidays DataFrame
+        self.set_holidays()
+        # Get the current datetime in UTC-3
+        timezone = pytz.timezone('America/Argentina/Buenos_Aires')
+        now = datetime.now(timezone).replace(tzinfo=None)  # Convert to offset-naive datetime
 
-    webdriver_path = f'{getcwd()}/webdriver'
+        # Get future holidays (including today)
+        future_holidays_df = self.holidays[self.holidays["date"] >= now]
 
-    # Launch Chrome with the profile and load the URL
-    options = Options()
-    options.page_load_strategy = 'normal'
-    options.add_argument(f"--user-data-dir={webdriver_path}")
-    options.add_argument('--headless')
+        # Get the next holiday
+        self.next_holiday = future_holidays_df.iloc[0]
 
-    driver = webdriver.Chrome(options=options)
-    driver.get(url)
+        # Get next holiday date info
+        self.next_holiday_day = self.next_holiday["dia"]
+        self.next_holiday_month = self.next_holiday["mes"]
+        self.next_holiday_year = self.next_holiday["year"]
+        self.next_holiday_reason = self.next_holiday["motivo"]
+        self.next_holiday_weekday = self.next_holiday["weekday"]
 
-    # Get the page source after JavaScript rendering
-    page_source = driver.page_source
+        # Get days left to next holiday and add 1 to include today
+        self.days_left = (datetime(self.next_holiday_year, self.next_holiday_month, self.next_holiday_day)
+                          - now).days + 1
 
-    # Close the browser
-    driver.quit()
+        self.process_long_weekends()
 
-    return page_source
+    def process_long_weekends(self):
+        next_holiday_date = self.next_holiday["date"]
 
+        # Set first and last weekend dates
+        self.set_first_weekend_date(next_holiday_date)
+        self.set_last_weekend_date(self.first_weekend_date)
 
-def fancy_days_left(days_left: str) -> str:
-    fancy_mapping = {
-        "0": "0️⃣",
-        "1": "1️⃣",
-        "2": "2️⃣",
-        "3": "3️⃣",
-        "4": "4️⃣",
-        "5": "5️⃣",
-        "6": "6️⃣",
-        "7": "7️⃣",
-        "8": "8️⃣",
-        "9": "9️⃣"
-    }
-    fancy_days_left = "".join(fancy_mapping.get(number, "") for number in days_left)
+        # Get the number of days between the first and last weekend dates
+        self.weekend_length = (self.last_weekend_date - self.first_weekend_date).days + 1
 
-    return fancy_days_left
+    def set_first_weekend_date(self, date):
+        # Check if the day before of next_holiday is a holiday or weekend
+        day_before = date - timedelta(days=1)
+        if day_before.weekday() > 4 or day_before in self.holidays["date"].values:
+            self.set_first_weekend_date(day_before)
+        else:
+            self.first_weekend_date = date
 
+    def set_last_weekend_date(self, date):
+        # Check if the day after of date is a holiday or weekend
+        day_after = date + timedelta(days=1)
+        if day_after.weekday() > 4 or day_after in self.holidays["date"].values:
+            self.set_last_weekend_date(day_after)
+        else:
+            self.last_weekend_date = date
 
-def get_weekday(days_left: str) -> str:
-    # Get the current datetime in UTC-3
-    current_datetime = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-3))) \
-                       + datetime.timedelta(days=int(days_left))
+    def set_tweet_content(self):
+        # First process Holiday's info
+        self.process_holidays()
 
-    weekday = current_datetime.strftime("%A")
-    spanish_mapping = {
-        "Sunday": "Domingo",
-        "Monday": "Lunes",
-        "Tuesday": "Martes",
-        "Wednesday": "Miércoles",
-        "Thursday": "Jueves",
-        "Friday": "Viernes",
-        "Saturday": "Sábado"
-    }
-    return spanish_mapping.get(weekday, "")
+        self.tweet_content = ""
 
+        if self.days_left == 0:
+            self.tweet_content += f"Hoy es feriado!\n\n"
+            self.tweet_content += f"⁉️{self.next_holiday_reason}"
 
-def get_tweet_content() -> str:
-    days_left, feriado_name, date_str = get_elements(get_html())
-    emoji_days_left = fancy_days_left(days_left)
-    tweet = ""
-    if days_left == "0":
-        tweet += f"Hoy es feriado!\n\n"
-        tweet += f"⁉️{feriado_name}"
+        elif self.days_left == 1:
+            self.tweet_content += f"Mañana es feriado! 🔜\n\n"
+            self.tweet_content += f"⁉️{self.next_holiday_reason}"
 
-    elif days_left == "1":
-        tweet += f"Mañana es feriado! 🔜\n\n"
-        tweet += f"⁉️{feriado_name}"
+        else:
+            date_str = get_date_str(self.next_holiday_weekday, self.next_holiday_day, self.next_holiday_month,
+                                    self.next_holiday_year)
 
-    else:
-        weekday = get_weekday(days_left)
-        tweet += f"Faltan {emoji_days_left} días para el próximo feriado\n\n"
-        tweet += f"🗓️ {weekday} {date_str}\n\n"
-        tweet += f"⁉️ {feriado_name}"
+            self.tweet_content += f"Faltan {get_fancy_numbers(self.days_left)} días para el próximo feriado:\n\n"
+            self.tweet_content += f"🗓️ {date_str}\n"
+            self.tweet_content += f"⁉️ {self.next_holiday_reason}"
 
-    return tweet
+        if self.weekend_length > 2:
+            weekend_start_date_str = get_date_str(self.first_weekend_date.strftime("%A"),
+                                                  self.first_weekend_date.day,
+                                                  self.first_weekend_date.month,
+                                                  self.first_weekend_date.year)
+
+            weekend_end_date_str = get_date_str(self.last_weekend_date.strftime("%A"),
+                                                self.last_weekend_date.day,
+                                                self.last_weekend_date.month,
+                                                self.last_weekend_date.year)
+
+            self.tweet_content += f"\n\n\nSerá un fin de semana de {get_fancy_numbers(self.weekend_length)} días:\n\n"
+            self.tweet_content += f"📈 Desde el {weekend_start_date_str}\n"
+            self.tweet_content += f"📉 Hasta el {weekend_end_date_str}"
+
+        return self.tweet_content
 
 
 if __name__ == '__main__':
-    main()
+    HolidayInfo().run()
