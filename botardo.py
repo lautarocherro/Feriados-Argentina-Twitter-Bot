@@ -12,6 +12,7 @@ from util import sleep_until_next_tweet, load_env_variables, get_date_str, get_f
 
 class HolidayInfo:
     def __init__(self):
+        self.is_weekened_next_holiday = False
         self.weekend_length = None
         self.first_weekend_date = None
         self.last_weekend_date = None
@@ -129,7 +130,12 @@ class HolidayInfo:
         future_holidays_df = self.holidays[self.holidays["date"] >= now]
 
         # Get the next holiday
-        self.next_holiday = future_holidays_df.iloc[0]
+        for i in range(len(future_holidays_df)):
+            self.next_holiday = future_holidays_df.iloc[i]
+            if self.next_holiday["weekday"] == "Saturday" or self.next_holiday["weekday"] == "Sunday":
+                self.is_weekened_next_holiday = True
+            else:
+                break
 
         # Get next holiday date info
         self.next_holiday_day = self.next_holiday["dia"]
@@ -187,8 +193,10 @@ class HolidayInfo:
         else:
             date_str = get_date_str(self.next_holiday_weekday, self.next_holiday_day, self.next_holiday_month,
                                     self.next_holiday_year)
+            not_weekend = " (que no caiga un fin de semana)" if self.is_weekened_next_holiday else ""
 
-            self.tweet_content += f"Faltan {get_fancy_numbers(self.days_left)} días para el próximo feriado:\n\n"
+            self.tweet_content += f"Faltan {get_fancy_numbers(self.days_left)} días para el próximo feriado" \
+                                  f"{not_weekend}:\n\n"
             self.tweet_content += f"🗓️ {date_str}\n"
             self.tweet_content += f"⁉️ {self.next_holiday_reason}"
 
