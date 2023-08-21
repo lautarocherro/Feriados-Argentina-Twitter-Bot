@@ -35,7 +35,7 @@ class HolidayInfo:
         self.consumer_secret = getenv("TW_CONSUMER_SECRET")
         self.oauth_token = getenv("TW_OAUTH_TOKEN")
         self.oauth_token_secret = getenv("TW_OAUTH_TOKEN_SECRET")
-        self.oauth_token_secret = getenv("DISCORD_WEBHOOK")
+        self.webhook_url = getenv("DISCORD_WEBHOOK")
 
     def run(self):
         print("Running...")
