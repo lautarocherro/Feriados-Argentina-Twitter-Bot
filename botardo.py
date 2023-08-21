@@ -4,6 +4,7 @@ from os import getenv
 
 import pandas as pd
 import pytz
+import requests
 from requests import get as get_request
 from requests_oauthlib import OAuth1Session
 
@@ -12,6 +13,7 @@ from util import sleep_until_next_tweet, load_env_variables, get_date_str, get_f
 
 class HolidayInfo:
     def __init__(self):
+        self.webhook_url = None
         self.is_weekened_next_holiday = False
         self.weekend_length = None
         self.first_weekend_date = None
@@ -33,13 +35,18 @@ class HolidayInfo:
         self.consumer_secret = getenv("TW_CONSUMER_SECRET")
         self.oauth_token = getenv("TW_OAUTH_TOKEN")
         self.oauth_token_secret = getenv("TW_OAUTH_TOKEN_SECRET")
+        self.oauth_token_secret = getenv("DISCORD_WEBHOOK")
 
     def run(self):
         print("Running...")
 
         while True:
-            sleep_until_next_tweet()
-            self.make_tweet()
+            try:
+                sleep_until_next_tweet()
+                self.make_tweet()
+            except Exception as e:
+                print(e)
+                self.send_discord_message()
 
     def make_tweet(self):
 
@@ -217,6 +224,16 @@ class HolidayInfo:
 
         return self.tweet_content
 
+    def send_discord_message(self):
+        try:
+            message_content = 'Falló la generación de un tweet :('
 
+            data = {
+                'content': message_content
+            }
+
+            requests.post(self.webhook_url, json=data)
+        except:
+            pass
 if __name__ == '__main__':
     HolidayInfo().run()
