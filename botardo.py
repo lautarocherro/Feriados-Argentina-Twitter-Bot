@@ -69,7 +69,7 @@ class HolidayInfo:
             json=payload,
         )
 
-        if response.status_code != 201:
+        if response.status_code in (201, 401):
             raise Exception(
                 "Request returned an error: {} {}".format(response.status_code, response.text)
             )
