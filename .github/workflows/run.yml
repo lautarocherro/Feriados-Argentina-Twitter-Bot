@@ -22,7 +22,7 @@ jobs:
         pip install -r requirements.txt
 
     - name: Run Python script
-      run: python your_script.py
+      run: python botardo.py
       env:
         TW_CONSUMER_KEY: ${{ secrets.TW_CONSUMER_KEY }}
         TW_CONSUMER_SECRET: ${{ secrets.TW_CONSUMER_SECRET }}
