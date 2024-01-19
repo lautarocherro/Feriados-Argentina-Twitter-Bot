@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 from json import dumps
-from os import getenv
 
 import pandas as pd
 import pytz
@@ -8,7 +7,9 @@ import requests
 from requests import get as get_request
 from requests_oauthlib import OAuth1Session
 
-from util import sleep_until_next_tweet, load_env_variables, get_date_str, get_fancy_numbers
+from util import get_date_str, get_fancy_numbers
+
+import os
 
 
 class HolidayInfo:
@@ -30,23 +31,19 @@ class HolidayInfo:
         self.next_holiday_day = None
         self.holidays = None
 
-        load_env_variables()
-        self.consumer_key = getenv("TW_CONSUMER_KEY")
-        self.consumer_secret = getenv("TW_CONSUMER_SECRET")
-        self.oauth_token = getenv("TW_OAUTH_TOKEN")
-        self.oauth_token_secret = getenv("TW_OAUTH_TOKEN_SECRET")
-        self.webhook_url = getenv("DISCORD_WEBHOOK")
+        self.consumer_key = os.environ.get("TW_CONSUMER_KEY")
+        self.consumer_secret = os.environ.get("TW_CONSUMER_SECRET")
+        self.oauth_token = os.environ.get("TW_OAUTH_TOKEN")
+        self.oauth_token_secret = os.environ.get("TW_OAUTH_TOKEN_SECRET")
+        self.webhook_url = os.environ.get("DISCORD_WEBHOOK")
 
     def run(self):
         print("Running...")
 
-        while True:
-            try:
-                sleep_until_next_tweet()
-                self.make_tweet()
-            except Exception as e:
-                print(e)
-                self.send_discord_message()
+        try:
+            self.make_tweet()
+        except Exception as e:
+            self.send_discord_message(e)
 
     def make_tweet(self):
 
@@ -224,9 +221,12 @@ class HolidayInfo:
 
         return self.tweet_content
 
-    def send_discord_message(self):
+    def send_discord_message(self, error):
         try:
-            message_content = 'Falló la generación de un tweet :('
+            message_content = f"""
+            Falló la generación de un tweet :(
+            {error}
+            """
 
             data = {
                 'content': message_content
