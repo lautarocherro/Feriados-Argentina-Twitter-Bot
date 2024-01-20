@@ -7,7 +7,7 @@ import requests
 from requests import get as get_request
 from requests_oauthlib import OAuth1Session
 
-from util import get_date_str, get_fancy_numbers
+from util import get_date_str, get_fancy_numbers, get_now_arg
 
 import os
 
@@ -38,7 +38,7 @@ class HolidayInfo:
         self.webhook_url = os.environ.get("DISCORD_WEBHOOK")
 
     def run(self):
-        print("Running...")
+        print(f'Running at {get_now_arg().strftime("%Y-%m-%d %H:%M:%S")}')
 
         try:
             self.make_tweet()
@@ -79,7 +79,7 @@ class HolidayInfo:
 
     def set_holidays(self):
         # Get current year
-        year = datetime.now().year
+        year = get_now_arg().year
 
         current_year_url = f"https://nolaborables.com.ar/api/v2/feriados/{year}"
         next_year_url = f"https://nolaborables.com.ar/api/v2/feriados/{year + 1}"

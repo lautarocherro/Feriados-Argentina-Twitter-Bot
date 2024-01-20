@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 month_mapping = {
     1: "Enero",
     2: "Febrero",
@@ -44,3 +46,16 @@ def get_date_str(weekday, day, month, year) -> str:
 
 def get_fancy_numbers(days: int) -> str:
     return "".join(fancy_mapping.get(number, "") for number in str(days))
+
+
+def get_now_arg():
+    # Get the current UTC time
+    utc_now = datetime.utcnow()
+
+    # Define a timedelta for UTC - 3 hours
+    utc_minus_3_delta = timedelta(hours=-3)
+
+    # Calculate the UTC - 3 time by subtracting the timedelta
+    utc_minus_3_time = utc_now + utc_minus_3_delta
+
+    return utc_minus_3_time
