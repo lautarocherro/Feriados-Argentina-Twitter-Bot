@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta
 from json import dumps
 
@@ -88,14 +89,17 @@ class HolidayInfo:
         current_year_response = get_request(current_year_url)
         next_year_response = get_request(next_year_url)
 
+        # Handle API errors
         if current_year_response.status_code != 200 or next_year_response.status_code != 200:
-            raise Exception(
-                "Request returned an error: {} {}".format(current_year_response.status_code, current_year_response.text)
-            )
-
-        # Convert responses to JSON
-        current_year_json = current_year_response.json()
-        next_year_json = next_year_response.json()
+            self.send_discord_message("Error al obtener los feriados")
+            with open(f"feriados/{year}.json", "r") as file:
+                current_year_json = json.loads(file.read())
+            with open(f"feriados/{year + 1}.json", "r") as file:
+                next_year_json = json.loads(file.read())
+        else:
+            # Convert responses to JSON
+            current_year_json = current_year_response.json()
+            next_year_json = next_year_response.json()
 
         # Convert the response to a DataFrame for this year
         self.holidays = pd.DataFrame(current_year_json).drop(columns=["info", "id", "original", "tipo"])
