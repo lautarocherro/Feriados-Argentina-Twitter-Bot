@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from json import dumps
 
 import pandas as pd
-import pytz
 import requests
 from requests import get as get_request
 from requests_oauthlib import OAuth1Session
@@ -130,9 +129,9 @@ class HolidayInfo:
 
         # First, get the Holidays DataFrame
         self.set_holidays()
+
         # Get the current datetime in UTC-3
-        timezone = pytz.timezone('America/Argentina/Buenos_Aires')
-        now = datetime.now(timezone).replace(tzinfo=None)  # Convert to offset-naive datetime
+        now = get_now_arg()
 
         # Get future holidays (including today)
         future_holidays_df = self.holidays[self.holidays["date"] >= now]

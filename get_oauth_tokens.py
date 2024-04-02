@@ -1,6 +1,5 @@
 if __name__ == "__main__":
     from requests_oauthlib import OAuth1Session
-    import os
 
     consumer_key = "YOUR_CONSUMER_KEY"
     consumer_secret = "YOUR_CONSUMER_SECRET"

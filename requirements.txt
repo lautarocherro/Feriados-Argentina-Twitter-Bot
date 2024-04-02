@@ -1,4 +1,3 @@
 requests
 pandas
-pytz
 requests_oauthlib
