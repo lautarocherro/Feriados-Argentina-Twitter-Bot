@@ -92,7 +92,6 @@ class HolidayInfo:
                 raise Exception
         except:
             use_cache = True
-            self.send_discord_message("Error al obtener los feriados")
             
         if use_cache:
             with open(f"feriados/{year}.json", "r") as file:
