@@ -75,6 +75,7 @@ class HolidayInfo:
         print(dumps(json_response, indent=4, sort_keys=True))
 
     def set_holidays(self):
+        use_cache = False
         # Get current year
         year = get_now_arg().year
 
@@ -82,12 +83,18 @@ class HolidayInfo:
         next_year_url = f"https://nolaborables.com.ar/api/v2/feriados/{year + 1}"
 
         # Make the requests
-        current_year_response = get_request(current_year_url)
-        next_year_response = get_request(next_year_url)
+        try:
+            current_year_response = get_request(current_year_url)
+            next_year_response = get_request(next_year_url)
 
-        # Handle API errors
-        if current_year_response.status_code != 200 or next_year_response.status_code != 200:
+            # Handle API errors
+            if current_year_response.status_code != 200 or next_year_response.status_code != 200:
+                raise Exception
+        except:
+            use_cache = True
             self.send_discord_message("Error al obtener los feriados")
+            
+        if use_cache:
             with open(f"feriados/{year}.json", "r") as file:
                 current_year_json = json.loads(file.read())
             with open(f"feriados/{year + 1}.json", "r") as file:
