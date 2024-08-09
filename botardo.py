@@ -40,10 +40,7 @@ class HolidayInfo:
     def run(self):
         print(f'Running at {get_now_arg().strftime("%Y-%m-%d %H:%M:%S")}')
 
-        try:
-            self.make_tweet()
-        except Exception as e:
-            self.send_discord_message(e)
+        self.make_tweet()
 
     def make_tweet(self):
 
